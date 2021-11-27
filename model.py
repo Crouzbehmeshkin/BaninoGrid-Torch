@@ -40,10 +40,12 @@ class CustomLSTM(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        stdv = 1.0 / np.sqrt(self.hidden_size)
-        for weight in self.parameters():
-            # weight.data.uniform_(-stdv, stdv)
-            nn.init.kaiming_uniform_(weight)
+        # stdv = 1.0 / np.sqrt(self.hidden_size)
+
+        # nn.init.kaiming_uniform_(self.W)
+        # nn.init.kaiming_uniform_(self.U)
+        # nn.init.zeros_(self.bias)
+        pass
 
     def forward(self, x_t, prev_state):
         HS = self.hidden_size

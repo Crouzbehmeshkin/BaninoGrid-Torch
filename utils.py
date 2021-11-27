@@ -35,6 +35,7 @@ def load_datadic_from_tfrecords(path, _Datasets, env_name: str, feature_map: dic
         datadic['ego_vel'].append(parsed_record['ego_vel'].numpy())
         datadic['target_pos'].append(parsed_record['target_pos'].numpy())
         datadic['target_hd'].append(parsed_record['target_hd'].numpy())
+    return datadic
 
 
 def get_place_cell_ensembles(
