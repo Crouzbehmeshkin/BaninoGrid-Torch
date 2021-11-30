@@ -42,10 +42,9 @@ class CustomLSTM(nn.Module):
     def init_weights(self):
         # stdv = 1.0 / np.sqrt(self.hidden_size)
 
-        # nn.init.kaiming_uniform_(self.W)
-        # nn.init.kaiming_uniform_(self.U)
-        # nn.init.zeros_(self.bias)
-        pass
+        nn.init.kaiming_uniform_(self.W)
+        nn.init.kaiming_uniform_(self.U)
+        nn.init.zeros_(self.bias)
 
     def forward(self, x_t, prev_state):
         HS = self.hidden_size
@@ -114,7 +113,7 @@ class GridTorch(nn.Module):
         self.dropouts = []
         for rate in self._dropoutrates_bottleneck:
             self.dropouts.append(nn.Dropout(rate))
-        self.section_size = self._nh_lstm // len(self.dropouts)
+        self.section_size = self._nh_bottleneck // len(self.dropouts)
 
         #Linear layer projecting to place and head direction cells
         self.pc_logits = nn.Linear(self._nh_bottleneck, self._target_ensembles[0].n_cells)

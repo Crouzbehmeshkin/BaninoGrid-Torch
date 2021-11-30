@@ -18,8 +18,11 @@ def softmax_sample(x):
     return dist.sample().type(torch.FloatTensor)
 
 
+Loss_Function = torch.nn.MultiLabelSoftMarginLoss(reduction='mean')
+
+
 class CellEnsemble(object):
-    def __init__(self, n_cells, soft_targets, soft_init):
+    def __init__(self, n_cells, soft_targets, soft_init, device):
         self.n_cells = n_cells
         if soft_targets not in ["softmax", "voronoi", "sample", "normalized"]:
             raise ValueError
@@ -74,9 +77,9 @@ class CellEnsemble(object):
         if self.soft_targets == "normalized":
             smoothing = 1e-2
             labels = (1. - smoothing) * targets + smoothing * 0.5
-            loss = torch.mean(predictions * labels)
+            loss = Loss_Function(predictions, labels)
         else:
-            loss = torch.mean(predictions * targets)
+            loss = Loss_Function(predictions, labels)
         return loss
 
     def log_posterior(self, x):
@@ -88,13 +91,15 @@ class CellEnsemble(object):
 class PlaceCellEnsemble(CellEnsemble):
     """Calculates the dist over place cells given an absolute position."""
 
-    def __init__(self, n_cells, stdev=0.35, pos_min=-5, pos_max=5, seed=None,
+    def __init__(self, n_cells, device, stdev=0.35, pos_min=-5, pos_max=5, seed=None,
                soft_targets=None, soft_init=None):
-        super(PlaceCellEnsemble, self).__init__(n_cells, soft_targets, soft_init)
+        super(PlaceCellEnsemble, self).__init__(n_cells, soft_targets, soft_init, device)
         # Create a random MoG with fixed cov over the position (Nx2)
         rs = np.random.RandomState(seed)
         self.means = rs.uniform(pos_min, pos_max, size=(self.n_cells, 2))
-        self.variances = np.ones_like(self.means) * stdev**2
+        self.means = torch.Tensor(self.means, device=device)
+
+        self.variances = torch.ones_like(self.means, device=device) * stdev**2
 
     def unnor_logpdf(self, trajs):
         # Output the probability of each component at each point (BxTxN)
@@ -106,15 +111,18 @@ class PlaceCellEnsemble(CellEnsemble):
 class HeadDirectionCellEnsemble(CellEnsemble):
     """Calculates the dist over HD cells given an absolute angle."""
 
-    def __init__(self, n_cells, concentration=20, seed=None,
+    def __init__(self, n_cells, device, concentration=20, seed=None,
            soft_targets=None, soft_init=None):
         super(HeadDirectionCellEnsemble, self).__init__(n_cells,
                                                         soft_targets,
-                                                        soft_init)
+                                                        soft_init,
+                                                        device)
         # Create a random Von Mises with fixed cov over the position
         rs = np.random.RandomState(seed)
         self.means = rs.uniform(-np.pi, np.pi, (n_cells))
-        self.kappa = np.ones_like(self.means) * concentration
+        self.means = torch.Tensor(self.means, device=device)
+
+        self.kappa = torch.ones_like(self.means, device=device) * concentration
 
     def unnor_logpdf(self, x):
         return self.kappa * torch.cos(x - self.means[np.newaxis, np.newaxis, :])

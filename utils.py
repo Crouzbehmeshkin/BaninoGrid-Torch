@@ -39,11 +39,12 @@ def load_datadic_from_tfrecords(path, _Datasets, env_name: str, feature_map: dic
 
 
 def get_place_cell_ensembles(
-        env_size, neurons_seed, targets_type, lstm_init_type, n_pc, pc_scale):
+        env_size, neurons_seed, targets_type, lstm_init_type, n_pc, pc_scale, device='cpu'):
     """Create the ensembles for the Place cells."""
     place_cell_ensembles = [
         ensembles.PlaceCellEnsemble(
             n,
+            device,
             stdev=s,
             pos_min=env_size / 2.0,
             pos_max=env_size / 0.2,
@@ -56,11 +57,12 @@ def get_place_cell_ensembles(
 
 
 def get_head_direction_ensembles(
-        neurons_seed, targets_type, lstm_init_type, n_hdc, hdc_concentration):
+        neurons_seed, targets_type, lstm_init_type, n_hdc, hdc_concentration, device='cpu'):
     """Create the ensembles for the Head direction cells."""
     head_direction_ensembles = [
         ensembles.HeadDirectionCellEnsemble(
             n,
+            device,
             concentration=con,
             seed=neurons_seed,
             soft_targets=targets_type,
@@ -74,9 +76,11 @@ def encode_initial_conditions(
         init_pos, init_hd, place_cell_ensembles, head_direction_ensembles):
     initial_conds = []
     for ens in place_cell_ensembles:
+        cond_i = ens.get_init(init_pos[:, None, :])
         initial_conds.append(
-            torch.squeeze(ens.get_init(init_pos[:, None, :]), dim=1))
+            torch.squeeze(ens.get_init(init_pos[:, None, :])))
     for ens in head_direction_ensembles:
+        cond_i = ens.get_init(init_hd[:, None, :])
         initial_conds.append(
             torch.squeeze(ens.get_init(init_hd[:, None, :])))
     return initial_conds
