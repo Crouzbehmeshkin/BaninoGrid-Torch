@@ -138,7 +138,7 @@ if __name__ == '__main__':
             
             init_pos = init_pos.to(device)
             init_hd = init_hd.to(device)
-            ego_vel = ego_vel.to(device)
+            ego_vel = torch.swapaxes(ego_vel.to(device), 0, 1)
             
             target_pos = target_pos.to(device)
             target_hd = target_hd.to(device)

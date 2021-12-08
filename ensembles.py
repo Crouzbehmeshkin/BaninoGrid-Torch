@@ -95,6 +95,7 @@ class PlaceCellEnsemble(CellEnsemble):
                soft_targets=None, soft_init=None):
         super(PlaceCellEnsemble, self).__init__(n_cells, soft_targets, soft_init, device)
         # Create a random MoG with fixed cov over the position (Nx2)
+        
         rs = np.random.RandomState(seed)
         self.means = rs.uniform(pos_min, pos_max, size=(self.n_cells, 2))
         self.means = torch.Tensor(self.means).to(device)
