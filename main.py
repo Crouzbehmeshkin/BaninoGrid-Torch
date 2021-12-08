@@ -29,7 +29,8 @@ TIME = 50
 PAUSE_TIME = None
 SAVE_LOC = 'experiments/'
 
-path = 'data/tf-records/'
+# path = 'data/tf-records/'
+path = 'data/'
 DatasetInfo = collections.namedtuple(
     'DatasetInfo', ['basepath', 'size', 'sequence_length', 'coord_range'])
 
@@ -112,7 +113,7 @@ if __name__ == '__main__':
 
     # Defining the model and getting its parameters
     gridtorchmodel = model.GridTorch(target_ensembles, NH_LSTM, NH_BOTTLENECK,
-                                     dropoutrates_bottleneck=BOTTLENECK_DROPOUT)
+                                     dropoutrates_bottleneck=BOTTLENECK_DROPOUT).to(device)
     params = gridtorchmodel.parameters()
 
     # Optimizer
@@ -134,6 +135,13 @@ if __name__ == '__main__':
 
             init_pos, init_hd, ego_vel = X
             target_pos, target_hd = y
+            
+            init_pos = init_pos.to(device)
+            init_hd = init_hd.to(device)
+            ego_vel = ego_vel.to(device)
+            
+            target_pos = target_pos.to(device)
+            target_hd = target_hd.to(device)
 
             # Getting initial conditions
             init_conds = utils.encode_initial_conditions(init_pos, init_hd, place_cell_ensembles,

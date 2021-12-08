@@ -39,7 +39,7 @@ def load_datadic_from_tfrecords(path, _Datasets, env_name: str, feature_map: dic
 
 
 def get_place_cell_ensembles(
-        env_size, neurons_seed, targets_type, lstm_init_type, n_pc, pc_scale, device='cpu'):
+        env_size, neurons_seed, targets_type, lstm_init_type, n_pc, pc_scale, device):
     """Create the ensembles for the Place cells."""
     place_cell_ensembles = [
         ensembles.PlaceCellEnsemble(
@@ -57,7 +57,7 @@ def get_place_cell_ensembles(
 
 
 def get_head_direction_ensembles(
-        neurons_seed, targets_type, lstm_init_type, n_hdc, hdc_concentration, device='cpu'):
+        neurons_seed, targets_type, lstm_init_type, n_hdc, hdc_concentration, device):
     """Create the ensembles for the Head direction cells."""
     head_direction_ensembles = [
         ensembles.HeadDirectionCellEnsemble(

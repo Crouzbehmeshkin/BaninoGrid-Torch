@@ -97,9 +97,9 @@ class PlaceCellEnsemble(CellEnsemble):
         # Create a random MoG with fixed cov over the position (Nx2)
         rs = np.random.RandomState(seed)
         self.means = rs.uniform(pos_min, pos_max, size=(self.n_cells, 2))
-        self.means = torch.Tensor(self.means, device=device)
+        self.means = torch.Tensor(self.means).to(device)
 
-        self.variances = torch.ones_like(self.means, device=device) * stdev**2
+        self.variances = torch.ones_like(self.means).to(device) * stdev**2
 
     def unnor_logpdf(self, trajs):
         # Output the probability of each component at each point (BxTxN)
@@ -120,9 +120,9 @@ class HeadDirectionCellEnsemble(CellEnsemble):
         # Create a random Von Mises with fixed cov over the position
         rs = np.random.RandomState(seed)
         self.means = rs.uniform(-np.pi, np.pi, (n_cells))
-        self.means = torch.Tensor(self.means, device=device)
+        self.means = torch.Tensor(self.means).to(device)
 
-        self.kappa = torch.ones_like(self.means, device=device) * concentration
+        self.kappa = torch.ones_like(self.means).to(device) * concentration
 
     def unnor_logpdf(self, x):
         return self.kappa * torch.cos(x - self.means[np.newaxis, np.newaxis, :])
