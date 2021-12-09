@@ -9,13 +9,12 @@ import torch
 import tensorflow as tf
 from dataloader import SupervisedDataset
 from torch.utils.data import DataLoader
-import torch.nn.functional as F
 import pandas as pd
 
 ## initial config
 N_EPOCHS = 1000
 RESULT_PER_EPOCH = 10 * 1
-CHECKPOINT_PER_EPOCH = 5
+CHECKPOINT_PER_EPOCH = 50
 CHECKPOINT_PATH = 'checkpoints/'
 
 NH_LSTM = 128
@@ -23,7 +22,6 @@ NH_BOTTLENECK = 256
 
 ENV_SIZE = 2.2
 BATCH_SIZE = 10
-TRAINING_STEPS_PER_EPOCH = 1000
 GRAD_CLIPPING = 1e-5
 SEED = 9101
 N_PC = [256]
@@ -83,17 +81,10 @@ test_params = {
     'num_workers': 6}
 
 # Equivalent of tf.nn.softmax_crossentropy_with_logits
-# Loss_Function = torch.nn.MultiLabelSoftMarginLoss(reduction='none')
-def Loss_Function(logits, labels):
-    logits = F.log_softmax(logits, dim=-1)
-    return -(labels*logits).sum(dim=-1)
+Loss_Function = torch.nn.MultiLabelSoftMarginLoss(reduction='none')
+
 
 def softmax_crossentropy_with_logits(labels, logits):
-    logits= torch.swapaxes(logits, 0, 1)
-    # print('labels', labels.size(), labels[(labels!=0)&(labels!=1)].size())
-    # print('logits', logits.size())
-    # if labels.size()[2] == 12:
-    #     print(labels[0,0,:])
     labels_2d = labels.reshape((-1, labels.size()[2]))
     logits_2d = logits.reshape((-1, logits.size()[2]))
     return Loss_Function(logits_2d, labels_2d)
@@ -144,36 +135,55 @@ if __name__ == '__main__':
                                     alpha=0.9,
                                     eps=1e-10)
 
-    # Creating Scorer Objects
-    starts = [0.2] * 10
-    ends = (np.linspace(0.4, 1.0, num=10)).tolist()
-    masks_parameters = zip(starts, ends)
+    saved_epochs = [0, 5, 10]
+    for saved_epoch in saved_epochs:
+        # Creating Scorer Objects
+        starts = [0.2] * 10
+        ends = (np.linspace(0.4, 1.0, num=10)).tolist()
+        masks_parameters = zip(starts, ends)
 
-    latest_epoch_scorer = scores.GridScorer(20, _DATASETS['square_room'].coord_range,
-                                            masks_parameters)
+        latest_epoch_scorer = scores.GridScorer(20, _DATASETS['square_room'].coord_range,
+                                                masks_parameters)
 
+        # Loading Selected Checkpoint
+        checkpoint = torch.load(CHECKPOINT_PATH + f'model_{saved_epoch:04d}.pt')
+        gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        epoch = checkpoint['epoch']
+        loss = checkpoint['loss']
+        print(f'Epoch: {epoch:04d}  loss: {loss}')
 
-    print('Started Training ...')
-    # Training Loop
-    epoch_losses = []
-    for epoch in range(N_EPOCHS):
-        gridtorchmodel.train()
-        step = 0
-        losses = []
+        gridtorchmodel.eval()
+
+        # Creating Scorer Objects
+        starts = [0.2] * 10
+        ends = (np.linspace(0.4, 1.0, num=10)).tolist()
+        masks_parameters = zip(starts, ends)
+
+        latest_epoch_scorer = scores.GridScorer(20, _DATASETS['square_room'].coord_range,
+                                                masks_parameters)
 
         activations = []
         posxy = []
 
+        print('Evaluating ...')
+
+
+        activations = []
+        posxy = []
+        EVAL_STEPS = 400
+        steps = 0
+
         for X, y in dataloader:
-            optimizer.zero_grad()
+            steps += 1
 
             init_pos, init_hd, ego_vel = X
             target_pos, target_hd = y
-            
+
             init_pos = init_pos.to(device)
             init_hd = init_hd.to(device)
             ego_vel = torch.swapaxes(ego_vel.to(device), 0, 1)
-            
+
             target_pos = target_pos.to(device)
             target_hd = target_hd.to(device)
 
@@ -200,53 +210,18 @@ if __name__ == '__main__':
 
             # accumulating targets x and y and activations for scorer
             # only if it's the right epoch!!!!!
-            if epoch % RESULT_PER_EPOCH == 0:
-                activations.append(torch.swapaxes(bottleneck_acts.detach().cpu(), 0, 1))
-                posxy.append(target_pos.detach().cpu())
 
-            pc_loss = softmax_crossentropy_with_logits(labels=ensemble_targets[0], logits=logits_pc)
-            hd_loss = softmax_crossentropy_with_logits(labels=ensemble_targets[1], logits=logits_hd)
-
-            total_loss = pc_loss + hd_loss
-            train_loss = total_loss.mean()
-
-            # weight decay
-            train_loss += gridtorchmodel.l2_loss * WEIGHT_DECAY
-
-            train_loss.backward()
-
-            # Gradient Clipping
-            torch.nn.utils.clip_grad_value_(params, GRAD_CLIPPING)
-
-            optimizer.step()
-
-            losses.append(train_loss.clone().item())
-            # print('Loss:', losses[-1])
-
-            if step > TRAINING_STEPS_PER_EPOCH:
+            activations.append(torch.swapaxes(bottleneck_acts.detach().cpu(), 0, 1))
+            posxy.append(target_pos.detach().cpu())
+            if steps == EVAL_STEPS:
                 break
-            step += 1
 
-        # Logging
-        epoch_loss_mean = torch.Tensor(losses).mean()
-        epoch_losses.append(epoch_loss_mean)
-        print(f'Epoch {epoch:4d}:  Loss:{epoch_loss_mean:4.4f}')
 
         # Evaluation
-        # activations = torch.cat(activations).numpy()
-        # posxy = torch.cat(posxy).numpy()
-        # results_filename = scores_filename + f'{epoch:04d}.pdf'
-        # if epoch % RESULT_PER_EPOCH == 0:
-        #     utils.get_scores_and_plot(latest_epoch_scorer, posxy, activations, scores_directory, results_filename)
+        activations = torch.cat(activations).numpy()
+        posxy = torch.cat(posxy).numpy()
+        results_filename = scores_filename + f'{epoch:04d}.pdf'
+        utils.get_scores_and_plot(latest_epoch_scorer, posxy, activations, scores_directory, results_filename,
+                                      sort_by_score_60=False)
 
-        # Checkpointing
-        if epoch % CHECKPOINT_PER_EPOCH == 0:
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': gridtorchmodel.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': epoch_loss_mean,
-            }, CHECKPOINT_PATH+f'model_{epoch:04d}.pt')
 
-    epoch_losses = np.array(epoch_losses)
-    np.save('epochlosses.npy', epoch_losses)

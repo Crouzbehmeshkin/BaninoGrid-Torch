@@ -84,6 +84,7 @@ class CellEnsemble(object):
 
     def log_posterior(self, x):
         logp = self.unnor_logpdf(x)
+        # print('logp', logp.size())
         log_posteriors = logp - torch.logsumexp(logp, dim=2, keepdim=True)
         return log_posteriors
 
@@ -126,4 +127,8 @@ class HeadDirectionCellEnsemble(CellEnsemble):
         self.kappa = torch.ones_like(self.means).to(device) * concentration
 
     def unnor_logpdf(self, x):
+        # print('x', x.size())
+        # print('means', self.means.size())
+        # print('cos', torch.cos(x - self.means[np.newaxis, np.newaxis, :]).size())
+        # print('kappa', self.kappa.size())
         return self.kappa * torch.cos(x - self.means[np.newaxis, np.newaxis, :])
