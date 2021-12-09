@@ -176,7 +176,7 @@ def get_scores_and_plot(scorer,
         acr = plt.subplot(rows*2, cols, n_units + i + 1)
         if i < n_units:
             index = ordering[i]
-            title = "%d (%.2f)" % (index, score_60(index))
+            title = "%d (%.2f)" % (index, score_60[index])
             #Plotting the activation maps
             scorer.plot_ratemap(s[index], ax=rf, title=title, cmap=cm)
             #Plotting the autocorrelation of the activation maps
