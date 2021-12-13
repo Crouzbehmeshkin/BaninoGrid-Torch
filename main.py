@@ -16,14 +16,15 @@ import pandas as pd
 N_EPOCHS = 1000
 RESULT_PER_EPOCH = 10 * 1
 CHECKPOINT_PER_EPOCH = 5
+EVAL_STEPS = 400 # Original 400
 CHECKPOINT_PATH = 'checkpoints/'
 
 NH_LSTM = 128
 NH_BOTTLENECK = 256
 
 ENV_SIZE = 2.2
-BATCH_SIZE = 10
-TRAINING_STEPS_PER_EPOCH = 1000
+BATCH_SIZE = 10  # original 10
+TRAINING_STEPS_PER_EPOCH = 1000    # original 1000
 GRAD_CLIPPING = 1e-5
 SEED = 9101
 N_PC = [256]
@@ -39,6 +40,8 @@ SAVE_LOC = 'experiments/'
 
 scores_filename = 'rates_'
 scores_directory = 'results/scores/'
+base_trace_filename = 'traces_'
+trace_directory = 'results/traces/'
 
 # path = 'data/tf-records/'
 path = 'data/'
@@ -158,12 +161,13 @@ if __name__ == '__main__':
     epoch_losses = []
     for epoch in range(N_EPOCHS):
         gridtorchmodel.train()
-        step = 0
+        step = 1
         losses = []
 
         activations = []
         posxy = []
 
+        # Training for the specified number of steps
         for X, y in dataloader:
             optimizer.zero_grad()
 
@@ -190,19 +194,6 @@ if __name__ == '__main__':
 
             # Collecting different parts of the output
             logits_hd, logits_pc, bottleneck_acts, rnn_states, rnn_cells = outs
-            # print(f'hd logits size: {logits_hd.size()}')
-            # print(f'pc logits size: {logits_pc.size()}')
-            # print()
-            # print(f'hd targets size: {ensemble_targets[0].size()}')
-            # print(f'pc targets size: {ensemble_targets[1].size()}')
-            #
-            # print(ensemble_targets[0].sum(axis=-1) == 1)
-
-            # accumulating targets x and y and activations for scorer
-            # only if it's the right epoch!!!!!
-            if epoch % RESULT_PER_EPOCH == 0:
-                activations.append(torch.swapaxes(bottleneck_acts.detach().cpu(), 0, 1))
-                posxy.append(target_pos.detach().cpu())
 
             pc_loss = softmax_crossentropy_with_logits(labels=ensemble_targets[0], logits=logits_pc)
             hd_loss = softmax_crossentropy_with_logits(labels=ensemble_targets[1], logits=logits_hd)
@@ -223,21 +214,67 @@ if __name__ == '__main__':
             losses.append(train_loss.clone().item())
             # print('Loss:', losses[-1])
 
-            if step > TRAINING_STEPS_PER_EPOCH:
+            if step >= TRAINING_STEPS_PER_EPOCH:
                 break
             step += 1
 
         # Logging
-        epoch_loss_mean = torch.Tensor(losses).mean()
+        losses_t = torch.Tensor(losses)
+        epoch_loss_mean = losses_t.mean()
+        epoch_loss_std = losses_t.std()
         epoch_losses.append(epoch_loss_mean)
-        print(f'Epoch {epoch:4d}:  Loss:{epoch_loss_mean:4.4f}')
+        print(f'Epoch {epoch:4d}:  Loss Mean:{epoch_loss_mean:4.4f}  Loss Std:{epoch_loss_std:4.4f}')
 
         # Evaluation
-        # activations = torch.cat(activations).numpy()
-        # posxy = torch.cat(posxy).numpy()
-        # results_filename = scores_filename + f'{epoch:04d}.pdf'
-        # if epoch % RESULT_PER_EPOCH == 0:
-        #     utils.get_scores_and_plot(latest_epoch_scorer, posxy, activations, scores_directory, results_filename)
+        if epoch % CHECKPOINT_PER_EPOCH == 0:
+            gridtorchmodel.eval()
+            eval_steps = 1
+
+            activations = []
+            target_posxy = []
+            pred_posxy = []
+
+            for X, y in dataloader:
+                init_pos, init_hd, ego_vel = X
+                target_pos, target_hd = y
+
+                init_pos = init_pos.to(device)
+                init_hd = init_hd.to(device)
+                ego_vel = torch.swapaxes(ego_vel.to(device), 0, 1)
+
+                target_pos = target_pos.to(device)
+                target_hd = target_hd.to(device)
+
+                # Getting initial conditions
+                init_conds = utils.encode_initial_conditions(init_pos, init_hd, place_cell_ensembles,
+                                                             head_direction_ensembles)
+                # Getting ensemble targets
+                ensemble_targets = utils.encode_targets(target_pos, target_hd, place_cell_ensembles,
+                                                        head_direction_ensembles)
+                # Running through the model
+                outs = gridtorchmodel(ego_vel, init_conds)
+
+                # Collecting different parts of the output
+                logits_hd, logits_pc, bottleneck_acts, rnn_states, rnn_cells = outs
+
+                # accumulating for plotting
+                activations.append(torch.swapaxes(bottleneck_acts.detach(), 0, 1))
+                target_posxy.append(target_pos.detach())
+                pred_posxy.append(torch.swapaxes(logits_pc.detach(), 0, 1))
+
+                if eval_steps >= EVAL_STEPS:
+                    break
+                eval_steps += 1
+
+            activations = torch.cat(activations).cpu().numpy()
+            target_posxy = torch.cat(target_posxy).cpu().numpy()
+            pred_posxy = torch.cat(pred_posxy).cpu().numpy()
+
+            results_filename = scores_filename + f'{epoch:04d}.pdf'
+            trace_filename = base_trace_filename + f'{epoch:04d}.pdf'
+            utils.get_scores_and_plot(latest_epoch_scorer, target_posxy, activations, scores_directory, results_filename)
+            utils.get_traces_and_plot(target_posxy, pred_posxy, place_cell_ensembles[0].means.cpu().numpy(), trace_directory, trace_filename)
+
 
         # Checkpointing
         if epoch % CHECKPOINT_PER_EPOCH == 0:

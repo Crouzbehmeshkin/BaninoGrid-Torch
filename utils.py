@@ -46,8 +46,8 @@ def get_place_cell_ensembles(
             n,
             device,
             stdev=s,
-            pos_min=env_size / 2.0,
-            pos_max=env_size / 0.2,
+            pos_min=-env_size / 2.0,
+            pos_max=env_size / 2.0,
             seed=neurons_seed,
             soft_targets=targets_type,
             soft_init=lstm_init_type)
@@ -76,11 +76,9 @@ def encode_initial_conditions(
         init_pos, init_hd, place_cell_ensembles, head_direction_ensembles):
     initial_conds = []
     for ens in place_cell_ensembles:
-        cond_i = ens.get_init(init_pos[:, None, :])
         initial_conds.append(
             torch.squeeze(ens.get_init(init_pos[:, None, :])))
     for ens in head_direction_ensembles:
-        cond_i = ens.get_init(init_hd[:, None, :])
         initial_conds.append(
             torch.squeeze(ens.get_init(init_hd[:, None, :])))
     return initial_conds
@@ -196,3 +194,45 @@ def get_scores_and_plot(scorer,
     return (np.asarray(score_60), np.asarray(score_90),
             np.asarray(map(np.mean, max_60_mask)),
             np.asarray(map(np.mean, max_90_mask)))
+
+def get_traces_and_plot(targets, preds, pc_centers, directory, filename, n_samples=20, save=True):
+    timesteps = targets.shape[1]
+
+    samples = np.random.randint(0, targets.shape[0], n_samples)
+    targets = targets[samples, : , :].reshape(-1, targets.shape[-1])
+    preds_mask = np.argmax(preds[samples, :, :].reshape(-1, preds.shape[-1]), axis=1)
+    preds = np.array([pc_centers[preds_mask[i], :] for i in range(preds_mask.shape[0])])
+
+    plt.style.use('ggplot')
+    targets = targets.reshape(-1, 2)
+
+    fig, axes = plt.subplots(nrows=4,
+                             ncols=n_samples//4,
+                             figsize=(n_samples*5 // 4, 4*5))
+    plt.setp(axes.flat, aspect=1.0, adjustable='box')
+    axes = axes.ravel()
+
+    for i in range(10 * (n_samples//10)):
+        axes[i].set_xlim([-1.1, 1.1])
+        axes[i].set_ylim([-1.1, 1.1])
+
+        start = i * timesteps
+        end = start + timesteps
+        axes[i].plot(targets[start, 0], targets[start, 1], 'ro')
+        axes[i].annotate('start', (targets[start, 0], targets[start, 1]),
+                         textcoords="offset points", xytext=(-15, -15), ha='left')
+        axes[i].plot(targets[end-1, 0], targets[end-1, 1], 'bo')
+        axes[i].annotate('target', (targets[end-1, 0], targets[end-1, 1]),
+                         textcoords="offset points", xytext=(-15, -15), ha='left')
+
+
+
+        axes[i].plot(targets[start:end, 0], targets[start:end, 1], 'r')
+        axes[i].plot(preds[start:end, 0], preds[start:end, 1], 'b')
+
+    if save:
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        with PdfPages(os.path.join(directory, filename), 'w') as f:
+            plt.savefig(f, format='pdf')
+        plt.close(fig)

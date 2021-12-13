@@ -18,7 +18,19 @@ def softmax_sample(x):
     return dist.sample().type(torch.FloatTensor)
 
 
-Loss_Function = torch.nn.MultiLabelSoftMarginLoss(reduction='mean')
+def Loss_Function(logits, labels):
+    logits = F.log_softmax(logits, dim=-1)
+    return -(labels*logits).sum(dim=-1)
+
+def softmax_crossentropy_with_logits(labels, logits):
+    logits= torch.swapaxes(logits, 0, 1)
+    # print('labels', labels.size(), labels[(labels!=0)&(labels!=1)].size())
+    # print('logits', logits.size())
+    # if labels.size()[2] == 12:
+    #     print(labels[0,0,:])
+    labels_2d = labels.reshape((-1, labels.size()[2]))
+    logits_2d = logits.reshape((-1, logits.size()[2]))
+    return Loss_Function(logits_2d, labels_2d)
 
 
 class CellEnsemble(object):
@@ -77,9 +89,9 @@ class CellEnsemble(object):
         if self.soft_targets == "normalized":
             smoothing = 1e-2
             labels = (1. - smoothing) * targets + smoothing * 0.5
-            loss = Loss_Function(predictions, labels)
+            loss = softmax_crossentropy_with_logits(labels, predictions)
         else:
-            loss = Loss_Function(predictions, labels)
+            loss = softmax_crossentropy_with_logits(targets, predictions)
         return loss
 
     def log_posterior(self, x):

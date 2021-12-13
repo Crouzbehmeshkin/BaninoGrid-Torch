@@ -41,7 +41,6 @@ class CustomLSTM(nn.Module):
 
     def init_weights(self):
         # stdv = 1.0 / np.sqrt(self.hidden_size)
-
         nn.init.kaiming_uniform_(self.W)
         nn.init.kaiming_uniform_(self.U)
         nn.init.zeros_(self.bias)
@@ -101,7 +100,7 @@ class GridTorch(nn.Module):
         self._init_conds_size = 268
 
         #LSTM Layer
-        self.rnn = CustomLSTM(3, self._nh_lstm)
+        self.rnn = CustomLSTM(3, self._nh_lstm,)
         self.init_h_embed = nn.Linear(self._init_conds_size, self._nh_lstm)
         self.init_c_embed = nn.Linear(self._init_conds_size, self._nh_lstm)
 
@@ -174,11 +173,11 @@ class GridTorch(nn.Module):
             hd_preds = self.hd_logits(dropout_out)
 
             #accumulating results
-            logits_hd += [hd_preds]
-            logits_pc += [pc_preds]
-            bottleneck_acts += [dropout_out]
-            rnn_states += [h_t]
-            rnn_cells += [c_t]
+            logits_hd.append(hd_preds)
+            logits_pc.append(pc_preds)
+            bottleneck_acts.append(dropout_out)
+            rnn_states.append(h_t)
+            rnn_cells.append(c_t)
 
         final_state = h_t
         outs = (torch.stack(logits_hd),
