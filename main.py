@@ -44,7 +44,7 @@ base_trace_filename = 'traces_'
 trace_directory = 'results/traces/'
 
 # path = 'data/tmp/'
-path = 'data/tmp/'
+path = 'data/'
 DatasetInfo = collections.namedtuple(
     'DatasetInfo', ['basepath', 'size', 'sequence_length', 'coord_range'])
 
@@ -284,5 +284,5 @@ if __name__ == '__main__':
                 'loss': epoch_loss_mean,
             }, CHECKPOINT_PATH+f'model_{epoch:04d}.pt')
 
-    epoch_losses = np.array(epoch_losses)
-    np.save('epochlosses.npy', epoch_losses)
+            epoch_losses_np = np.array(epoch_losses)
+            np.save('epochlosses.npy', epoch_losses_np)
