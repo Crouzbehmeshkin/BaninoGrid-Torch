@@ -77,10 +77,10 @@ def encode_initial_conditions(
     initial_conds = []
     for ens in place_cell_ensembles:
         initial_conds.append(
-            torch.squeeze(ens.get_init(init_pos[:, None, :])))
+            torch.squeeze(ens.get_init(init_pos), dim=1))
     for ens in head_direction_ensembles:
         initial_conds.append(
-            torch.squeeze(ens.get_init(init_hd[:, None, :])))
+            torch.squeeze(ens.get_init(init_hd), dim=1))
     return initial_conds
 
 

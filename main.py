@@ -32,8 +32,8 @@ N_HDC = [12]
 # Change Dropout to the required format
 BOTTLENECK_DROPOUT = [0.5]
 WEIGHT_DECAY = 1e-5
-LR = 1e-5
-MOMENTUM = 0.9
+LR = 1e-5 # Original 1e-5
+MOMENTUM = 0.9 # original 0.9
 TIME = 50
 PAUSE_TIME = None
 SAVE_LOC = 'experiments/'
@@ -43,8 +43,8 @@ scores_directory = 'results/scores/'
 base_trace_filename = 'traces_'
 trace_directory = 'results/traces/'
 
-# path = 'data/tf-records/'
-path = 'data/'
+# path = 'data/tmp/'
+path = 'data/tmp/'
 DatasetInfo = collections.namedtuple(
     'DatasetInfo', ['basepath', 'size', 'sequence_length', 'coord_range'])
 
@@ -86,7 +86,6 @@ test_params = {
     'num_workers': 6}
 
 # Equivalent of tf.nn.softmax_crossentropy_with_logits
-# Loss_Function = torch.nn.MultiLabelSoftMarginLoss(reduction='none')
 def Loss_Function(logits, labels):
     logits = F.log_softmax(logits, dim=-1)
     return -(labels*logits).sum(dim=-1)
@@ -177,7 +176,7 @@ if __name__ == '__main__':
             init_pos = init_pos.to(device)
             init_hd = init_hd.to(device)
             ego_vel = torch.swapaxes(ego_vel.to(device), 0, 1)
-            
+
             target_pos = target_pos.to(device)
             target_hd = target_hd.to(device)
 

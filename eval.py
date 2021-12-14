@@ -38,7 +38,7 @@ SAVE_LOC = 'experiments/'
 scores_filename = 'rates_'
 scores_directory = 'results/scores/'
 
-# path = 'data/tf-records/'
+# path = 'data/tmp/'
 path = 'data/'
 DatasetInfo = collections.namedtuple(
     'DatasetInfo', ['basepath', 'size', 'sequence_length', 'coord_range'])

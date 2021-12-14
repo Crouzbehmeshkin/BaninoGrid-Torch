@@ -117,6 +117,7 @@ class PlaceCellEnsemble(CellEnsemble):
 
     def unnor_logpdf(self, trajs):
         # Output the probability of each component at each point (BxTxN)
+        # minibatch T 1 2   -   1 1 n_cells 2
         diff = trajs[:, :, None, :] - self.means[np.newaxis, np.newaxis, ...]
         unnor_logp = -0.5 * torch.sum((diff**2)/self.variances, dim=-1)
         return unnor_logp
@@ -133,7 +134,7 @@ class HeadDirectionCellEnsemble(CellEnsemble):
                                                         device)
         # Create a random Von Mises with fixed cov over the position
         rs = np.random.RandomState(seed)
-        self.means = rs.uniform(-np.pi, np.pi, (n_cells))
+        self.means = rs.uniform(-np.pi, np.pi, (n_cells,))
         self.means = torch.Tensor(self.means).to(device)
 
         self.kappa = torch.ones_like(self.means).to(device) * concentration
@@ -143,4 +144,4 @@ class HeadDirectionCellEnsemble(CellEnsemble):
         # print('means', self.means.size())
         # print('cos', torch.cos(x - self.means[np.newaxis, np.newaxis, :]).size())
         # print('kappa', self.kappa.size())
-        return self.kappa * torch.cos(x - self.means[np.newaxis, np.newaxis, :])
+        return self.kappa * torch.cos(x - self.means[None, None, :])
