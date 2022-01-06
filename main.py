@@ -10,7 +10,15 @@ import tensorflow as tf
 from dataloader import SupervisedDataset
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
+import os
 import pandas as pd
+
+# for running stuff locally (Tensorflow didn't support my cuda version)
+tf.config.set_visible_devices([], 'GPU')
+
+# for turning off annoying warnings
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 
 ## initial config
 N_EPOCHS = 1000
@@ -37,6 +45,9 @@ MOMENTUM = 0.9 # original 0.9
 TIME = 50
 PAUSE_TIME = None
 SAVE_LOC = 'experiments/'
+
+TRAIN_DATA_RANGE = [0, 90]
+TEST_DATA_RANGE = [90, 100]
 
 scores_filename = 'rates_'
 scores_directory = 'results/scores/'
@@ -81,9 +92,9 @@ data_params = {
     'shuffle': True,
     'num_workers': 2}
 test_params = {
-    'batch_size': 100,
+    'batch_size': BATCH_SIZE,
     'shuffle': True,
-    'num_workers': 6}
+    'num_workers': 2}
 
 # Equivalent of tf.nn.softmax_crossentropy_with_logits
 def Loss_Function(logits, labels):
@@ -104,15 +115,19 @@ def softmax_crossentropy_with_logits(labels, logits):
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     # loading the data
-    data_dic = utils.load_datadic_from_tfrecords(path, _DATASETS, 'square_room', feature_map)
+    train_data_dic = utils.load_datadic_from_tfrecords(path, _DATASETS, 'square_room', feature_map, TRAIN_DATA_RANGE)
+    test_data_dic = utils.load_datadic_from_tfrecords(path, _DATASETS, 'square_room', feature_map, TEST_DATA_RANGE)
 
     use_cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if use_cuda else 'cpu')
     print('Using device:', device)
 
     # Dataset and Dataloader
-    dataset = SupervisedDataset(data_dic)
-    dataloader = DataLoader(dataset, **data_params)
+    train_dataset = SupervisedDataset(train_data_dic)
+    train_dataloader = DataLoader(train_dataset, **data_params)
+
+    test_dataset = SupervisedDataset(test_data_dic)
+    test_dataloader = DataLoader(test_dataset, **data_params)
 
     # Getting place and head direction cell ensembles
     place_cell_ensembles = utils.get_place_cell_ensembles(
@@ -162,12 +177,13 @@ if __name__ == '__main__':
         gridtorchmodel.train()
         step = 1
         losses = []
+        test_losses = []
 
         activations = []
         posxy = []
 
         # Training for the specified number of steps
-        for X, y in dataloader:
+        for X, y in train_dataloader:
             optimizer.zero_grad()
 
             init_pos, init_hd, ego_vel = X
@@ -228,42 +244,62 @@ if __name__ == '__main__':
         if epoch % CHECKPOINT_PER_EPOCH == 0:
             gridtorchmodel.eval()
             eval_steps = 1
+            losses = []
 
             activations = []
             target_posxy = []
             pred_posxy = []
 
-            for X, y in dataloader:
-                init_pos, init_hd, ego_vel = X
-                target_pos, target_hd = y
+            with torch.no_grad():
+                for X, y in test_dataloader:
+                    init_pos, init_hd, ego_vel = X
+                    target_pos, target_hd = y
 
-                init_pos = init_pos.to(device)
-                init_hd = init_hd.to(device)
-                ego_vel = torch.swapaxes(ego_vel.to(device), 0, 1)
+                    init_pos = init_pos.to(device)
+                    init_hd = init_hd.to(device)
+                    ego_vel = torch.swapaxes(ego_vel.to(device), 0, 1)
 
-                target_pos = target_pos.to(device)
-                target_hd = target_hd.to(device)
+                    target_pos = target_pos.to(device)
+                    target_hd = target_hd.to(device)
 
-                # Getting initial conditions
-                init_conds = utils.encode_initial_conditions(init_pos, init_hd, place_cell_ensembles,
-                                                             head_direction_ensembles)
-                # Getting ensemble targets
-                ensemble_targets = utils.encode_targets(target_pos, target_hd, place_cell_ensembles,
-                                                        head_direction_ensembles)
-                # Running through the model
-                outs = gridtorchmodel(ego_vel, init_conds)
+                    # Getting initial conditions
+                    init_conds = utils.encode_initial_conditions(init_pos, init_hd, place_cell_ensembles,
+                                                                 head_direction_ensembles)
+                    # Getting ensemble targets
+                    ensemble_targets = utils.encode_targets(target_pos, target_hd, place_cell_ensembles,
+                                                            head_direction_ensembles)
+                    # Running through the model
+                    outs = gridtorchmodel(ego_vel, init_conds)
 
-                # Collecting different parts of the output
-                logits_hd, logits_pc, bottleneck_acts, rnn_states, rnn_cells = outs
+                    # Collecting different parts of the output
+                    logits_hd, logits_pc, bottleneck_acts, rnn_states, rnn_cells = outs
 
-                # accumulating for plotting
-                activations.append(torch.swapaxes(bottleneck_acts.detach(), 0, 1))
-                target_posxy.append(target_pos.detach())
-                pred_posxy.append(torch.swapaxes(logits_pc.detach(), 0, 1))
+                    # Computing test loss
+                    pc_loss = softmax_crossentropy_with_logits(labels=ensemble_targets[0], logits=logits_pc)
+                    hd_loss = softmax_crossentropy_with_logits(labels=ensemble_targets[1], logits=logits_hd)
 
-                if eval_steps >= EVAL_STEPS:
-                    break
-                eval_steps += 1
+                    total_loss = pc_loss + hd_loss
+                    test_loss = total_loss.mean()
+
+                    # weight decay
+                    test_loss += gridtorchmodel.l2_loss * WEIGHT_DECAY
+
+                    losses.append(test_loss.clone().item())
+
+                    # accumulating for plotting
+                    activations.append(torch.swapaxes(bottleneck_acts.detach(), 0, 1))
+                    target_posxy.append(target_pos.detach())
+                    pred_posxy.append(torch.swapaxes(logits_pc.detach(), 0, 1))
+
+                    if eval_steps >= EVAL_STEPS:
+                        break
+                    eval_steps += 1
+
+            losses_t = torch.tensor(losses)
+            test_loss_mean = losses_t.mean()
+            test_loss_std = losses_t.std()
+            test_losses.append(test_loss_mean)
+            print(f'Mean test loss: {test_loss_mean:4.4f}  Test loss std: {test_loss_std:4.4f}')
 
             activations = torch.cat(activations).cpu().numpy()
             target_posxy = torch.cat(target_posxy).cpu().numpy()
@@ -286,3 +322,6 @@ if __name__ == '__main__':
 
             epoch_losses_np = np.array(epoch_losses)
             np.save('epochlosses.npy', epoch_losses_np)
+
+            test_losses_np = np.array(test_losses)
+            np.save('testlosses.npy', test_losses_np)

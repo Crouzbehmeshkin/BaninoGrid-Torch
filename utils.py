@@ -13,10 +13,16 @@ import torch
 import ensembles
 
 
-def load_datadic_from_tfrecords(path, _Datasets, env_name: str, feature_map: dict):
+def load_datadic_from_tfrecords(path, _Datasets, env_name: str, feature_map: dict, record_range):
     ds_info = _Datasets[env_name]
 
-    tfrecord_files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
+    tfrecord_files = list()
+    for f in listdir(path):
+        file_path = join(path, f)
+        if isfile(file_path):
+            file_number = int(f[:4])
+            if file_number >= record_range[0] and file_number < record_range[1]:
+                tfrecord_files.append(file_path)
     raw_dataset = tf.data.TFRecordDataset(tfrecord_files)
 
     def _parse_function(example_proto):
