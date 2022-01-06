@@ -161,6 +161,13 @@ if __name__ == '__main__':
                                     alpha=0.9,
                                     eps=1e-10)
 
+    start_epoch = 0
+    # if trying to resume training from a checkpoint, comment otherwise
+    checkpoint = torch.load(CHECKPOINT_PATH + f'model_{260:04d}.pt')
+    start_epoch = checkpoint['epoch'] + 1
+    gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
     # Creating Scorer Objects
     starts = [0.2] * 10
     ends = (np.linspace(0.4, 1.0, num=10)).tolist()
@@ -173,7 +180,7 @@ if __name__ == '__main__':
     print('Started Training ...')
     # Training Loop
     epoch_losses = []
-    for epoch in range(N_EPOCHS):
+    for epoch in range(start_epoch, N_EPOCHS):
         gridtorchmodel.train()
         step = 1
         losses = []
