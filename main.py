@@ -19,6 +19,8 @@ tf.config.set_visible_devices([], 'GPU')
 # for turning off annoying warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+# Neuromodulation config
+LSTM_TYPE = 'Simple_NM' # default, Simple_NM
 
 ## initial config
 N_EPOCHS = 1000
@@ -151,7 +153,8 @@ if __name__ == '__main__':
 
     # Defining the model and getting its parameters
     gridtorchmodel = model.GridTorch(target_ensembles, NH_LSTM, NH_BOTTLENECK,
-                                     dropoutrates_bottleneck=BOTTLENECK_DROPOUT).to(device)
+                                     dropoutrates_bottleneck=BOTTLENECK_DROPOUT,
+                                     LSTM_type=LSTM_TYPE).to(device)
     params = gridtorchmodel.parameters()
 
     # Optimizer
@@ -163,10 +166,10 @@ if __name__ == '__main__':
 
     start_epoch = 0
     # if trying to resume training from a checkpoint, comment otherwise
-    checkpoint = torch.load(CHECKPOINT_PATH + f'model_{260:04d}.pt')
-    start_epoch = checkpoint['epoch'] + 1
-    gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    # checkpoint = torch.load(CHECKPOINT_PATH + f'model_{260:04d}.pt')
+    # start_epoch = checkpoint['epoch'] + 1
+    # gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
+    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
     # Creating Scorer Objects
     starts = [0.2] * 10
@@ -211,8 +214,14 @@ if __name__ == '__main__':
             ensemble_targets = utils.encode_targets(target_pos, target_hd, place_cell_ensembles,
                                                     head_direction_ensembles)
 
+            # Initial Hebbian Trace
+            if LSTM_TYPE == 'Simple_NM':
+                hebb = torch.zeros((init_pos.shape[0], NH_LSTM, NH_LSTM), device=device)
+            else:
+                hebb = None
+
             # Running through the model
-            outs = gridtorchmodel(ego_vel, init_conds)
+            outs = gridtorchmodel(ego_vel, init_conds, hebb)
 
             # Collecting different parts of the output
             logits_hd, logits_pc, bottleneck_acts, rnn_states, rnn_cells = outs
@@ -275,8 +284,13 @@ if __name__ == '__main__':
                     # Getting ensemble targets
                     ensemble_targets = utils.encode_targets(target_pos, target_hd, place_cell_ensembles,
                                                             head_direction_ensembles)
+                    # Initial Hebbian Trace
+                    if LSTM_TYPE == 'Simple_NM':
+                        hebb = torch.zeros((init_pos.shape[0], NH_LSTM, NH_LSTM), device=device)
+                    else:
+                        hebb = None
                     # Running through the model
-                    outs = gridtorchmodel(ego_vel, init_conds)
+                    outs = gridtorchmodel(ego_vel, init_conds, hebb)
 
                     # Collecting different parts of the output
                     logits_hd, logits_pc, bottleneck_acts, rnn_states, rnn_cells = outs
