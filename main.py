@@ -20,7 +20,7 @@ tf.config.set_visible_devices([], 'GPU')
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # Neuromodulation config
-LSTM_TYPE = 'Simple_NM' # default, Simple_NM
+LSTM_TYPE = 'Simple_NM'  # default, Simple_NM
 
 ## initial config
 N_EPOCHS = 1000
@@ -39,7 +39,6 @@ GRAD_CLIPPING = 1e-5
 SEED = 9101
 N_PC = [256]
 N_HDC = [12]
-# Change Dropout to the required format
 BOTTLENECK_DROPOUT = [0.5]
 WEIGHT_DECAY = 1e-5
 LR = 1e-5 # Original 1e-5
@@ -164,12 +163,24 @@ if __name__ == '__main__':
                                     alpha=0.9,
                                     eps=1e-10)
 
-    start_epoch = 0
+    # For storing losses
+    epoch_losses = []
+    test_losses = []
+    epoch_hd_losses = []
+    epoch_pc_losses = []
+
+    start_epoch = 480
     # if trying to resume training from a checkpoint, comment otherwise
-    # checkpoint = torch.load(CHECKPOINT_PATH + f'model_{260:04d}.pt')
-    # start_epoch = checkpoint['epoch'] + 1
-    # gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
-    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    checkpoint = torch.load(CHECKPOINT_PATH + f'model_{start_epoch:04d}.pt')
+    start_epoch = checkpoint['epoch'] + 1
+    gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch_losses = checkpoint['epoch_losses']
+    test_losses = checkpoint['test_losses']
+    epoch_pc_losses = checkpoint['epoch_pc_losses']
+    epoch_hd_losses = checkpoint['epoch_hd_losses']
+
+
 
     # Creating Scorer Objects
     starts = [0.2] * 10
@@ -182,12 +193,13 @@ if __name__ == '__main__':
 
     print('Started Training ...')
     # Training Loop
-    epoch_losses = []
+
     for epoch in range(start_epoch, N_EPOCHS):
         gridtorchmodel.train()
         step = 1
         losses = []
-        test_losses = []
+        hd_losses = []
+        pc_losses = []
 
         activations = []
         posxy = []
@@ -243,6 +255,8 @@ if __name__ == '__main__':
             optimizer.step()
 
             losses.append(train_loss.clone().item())
+            hd_losses.append(hd_loss.mean().clone().item())
+            pc_losses.append(pc_loss.mean().clone().item())
             # print('Loss:', losses[-1])
 
             if step >= TRAINING_STEPS_PER_EPOCH:
@@ -255,6 +269,18 @@ if __name__ == '__main__':
         epoch_loss_std = losses_t.std()
         epoch_losses.append(epoch_loss_mean)
         print(f'Epoch {epoch:4d}:  Loss Mean:{epoch_loss_mean:4.4f}  Loss Std:{epoch_loss_std:4.4f}')
+
+        pc_losses_np = np.array(pc_losses)
+        hd_losses_np = np.array(hd_losses)
+        pc_losses_mean = pc_losses_np.mean()
+        pc_losses_std = pc_losses_np.std()
+        epoch_pc_losses.append(pc_losses_mean)
+        hd_losses_mean = hd_losses_np.mean()
+        hd_losses_std = hd_losses_np.std()
+        epoch_hd_losses.append(hd_losses_mean)
+        print(f'Mean PC loss:{pc_losses_mean:4.4f}  PC loss std:{pc_losses_std:4.4f}')
+        print(f'Mean HD loss:{hd_losses_mean:4.4f}  HD loss std:{hd_losses_std:4.4f}')
+
 
         # Evaluation
         if epoch % CHECKPOINT_PER_EPOCH == 0:
@@ -339,10 +365,21 @@ if __name__ == '__main__':
                 'model_state_dict': gridtorchmodel.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': epoch_loss_mean,
+                'epoch_losses': epoch_losses,
+                'test_losses': test_losses,
+                'epoch_pc_losses': epoch_pc_losses,
+                'epoch_hd_losses': epoch_hd_losses
             }, CHECKPOINT_PATH+f'model_{epoch:04d}.pt')
 
+            # Saving Loss files
             epoch_losses_np = np.array(epoch_losses)
             np.save('epochlosses.npy', epoch_losses_np)
 
             test_losses_np = np.array(test_losses)
             np.save('testlosses.npy', test_losses_np)
+
+            epoch_hd_losses_np = np.array(epoch_hd_losses)
+            np.save('epochhdlosses.npy', epoch_hd_losses_np)
+
+            epoch_pc_losses_np = np.array(epoch_pc_losses)
+            np.save('epochpclosses.npy', epoch_pc_losses_np)

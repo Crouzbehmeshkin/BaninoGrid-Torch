@@ -242,3 +242,12 @@ def get_traces_and_plot(targets, preds, pc_centers, directory, filename, n_sampl
         with PdfPages(os.path.join(directory, filename), 'w') as f:
             plt.savefig(f, format='pdf')
         plt.close(fig)
+
+
+def get_spatial_error(targets, preds, pc_centers):
+    preds_mask = np.argmax(preds.reshape(-1, preds.shape[-1]), axis=1)
+    # could be done faster using matrix multiplication
+    preds = np.array([pc_centers[preds_mask[i], :] for i in range(preds_mask.shape[0])])
+    targets = targets.reshape(-1, 2)
+
+    return np.linalg.norm(targets-preds, axis=1).mean()
