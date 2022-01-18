@@ -9,9 +9,9 @@ import torch
 import tensorflow as tf
 from dataloader import SupervisedDataset
 from torch.utils.data import DataLoader
+from DropoutScheduling import DPScheduler
 import torch.nn.functional as F
 import os
-import pandas as pd
 
 # for running stuff locally (Tensorflow didn't support my cuda version)
 tf.config.set_visible_devices([], 'GPU')
@@ -21,6 +21,13 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # Neuromodulation config
 LSTM_TYPE = 'Simple_NM'  # default, Simple_NM
+
+# Dropout Scheduling config
+DP_SCHEDULING = True
+DP_LOWERB = 0.2
+DP_UPPERB = 0.8
+DP_INIT = 0.5
+DP_UPDATE_FREQ = 10  # in epochs
 
 ## initial config
 N_EPOCHS = 1000
@@ -47,6 +54,8 @@ TIME = 50
 PAUSE_TIME = None
 SAVE_LOC = 'experiments/'
 
+# TRAIN_DATA_RANGE = [0, 3]
+# TEST_DATA_RANGE = [3, 6]
 TRAIN_DATA_RANGE = [0, 90]
 TEST_DATA_RANGE = [90, 100]
 
@@ -97,10 +106,18 @@ test_params = {
     'shuffle': True,
     'num_workers': 2}
 
+# For storing losses
+epoch_losses = []
+test_losses = []
+epoch_hd_losses = []
+epoch_pc_losses = []
+scheduled_dropouts = []
+
 # Equivalent of tf.nn.softmax_crossentropy_with_logits
 def Loss_Function(logits, labels):
     logits = F.log_softmax(logits, dim=-1)
     return -(labels*logits).sum(dim=-1)
+
 
 def softmax_crossentropy_with_logits(labels, logits):
     logits= torch.swapaxes(logits, 0, 1)
@@ -111,6 +128,61 @@ def softmax_crossentropy_with_logits(labels, logits):
     labels_2d = labels.reshape((-1, labels.size()[2]))
     logits_2d = logits.reshape((-1, logits.size()[2]))
     return Loss_Function(logits_2d, labels_2d)
+
+
+def log_losses(losses, pc_losses, hd_losses):
+    losses_t = torch.Tensor(losses)
+    epoch_loss_mean = losses_t.mean()
+    epoch_loss_std = losses_t.std()
+    epoch_losses.append(epoch_loss_mean)
+    print(f'Epoch {epoch:4d}:  Loss Mean:{epoch_loss_mean:4.4f}  Loss Std:{epoch_loss_std:4.4f}')
+
+    pc_losses_np = np.array(pc_losses)
+    hd_losses_np = np.array(hd_losses)
+    pc_losses_mean = pc_losses_np.mean()
+    pc_losses_std = pc_losses_np.std()
+    epoch_pc_losses.append(pc_losses_mean)
+    hd_losses_mean = hd_losses_np.mean()
+    hd_losses_std = hd_losses_np.std()
+    epoch_hd_losses.append(hd_losses_mean)
+    print(f'Mean PC loss:{pc_losses_mean:4.4f}  PC loss std:{pc_losses_std:4.4f}')
+    print(f'Mean HD loss:{hd_losses_mean:4.4f}  HD loss std:{hd_losses_std:4.4f}')
+
+
+def save_log_files():
+    epoch_losses_np = np.array(epoch_losses)
+    np.save('epochlosses.npy', epoch_losses_np)
+
+    test_losses_np = np.array(test_losses)
+    np.save('testlosses.npy', test_losses_np)
+
+    epoch_hd_losses_np = np.array(epoch_hd_losses)
+    np.save('epochhdlosses.npy', epoch_hd_losses_np)
+
+    epoch_pc_losses_np = np.array(epoch_pc_losses)
+    np.save('epochpclosses.npy', epoch_pc_losses_np)
+
+    if DP_SCHEDULING:
+        dropouts_np = np.array(scheduled_dropouts)
+        np.save('dropouts.npy', scheduled_dropouts)
+
+
+def log_evaluations(losses, activations, target_posxy, pred_posxy):
+    losses_t = torch.tensor(losses)
+    test_loss_mean = losses_t.mean()
+    test_loss_std = losses_t.std()
+    test_losses.append(test_loss_mean)
+    print(f'Mean test loss: {test_loss_mean:4.4f}  Test loss std: {test_loss_std:4.4f}')
+
+    activations_np = torch.cat(activations).cpu().numpy()
+    target_posxy_np = torch.cat(target_posxy).cpu().numpy()
+    pred_posxy_np = torch.cat(pred_posxy).cpu().numpy()
+
+    results_filename = scores_filename + f'{epoch:04d}.pdf'
+    trace_filename = base_trace_filename + f'{epoch:04d}.pdf'
+    utils.get_scores_and_plot(latest_epoch_scorer, target_posxy_np, activations_np, scores_directory, results_filename)
+    utils.get_traces_and_plot(target_posxy_np, pred_posxy_np, place_cell_ensembles[0].means.cpu().numpy(), trace_directory,
+                              trace_filename)
 
 
 # Press the green button in the gutter to run the script.
@@ -163,24 +235,21 @@ if __name__ == '__main__':
                                     alpha=0.9,
                                     eps=1e-10)
 
-    # For storing losses
-    epoch_losses = []
-    test_losses = []
-    epoch_hd_losses = []
-    epoch_pc_losses = []
+    # For Dropout Scheduling
+    dp_scheduler = None
+    if DP_SCHEDULING:
+        dp_scheduler = DPScheduler(DP_UPPERB, DP_LOWERB, N_EPOCHS, DP_UPDATE_FREQ, DP_INIT)
 
-    start_epoch = 480
+    start_epoch = 0
     # if trying to resume training from a checkpoint, comment otherwise
-    checkpoint = torch.load(CHECKPOINT_PATH + f'model_{start_epoch:04d}.pt')
-    start_epoch = checkpoint['epoch'] + 1
-    gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epoch_losses = checkpoint['epoch_losses']
-    test_losses = checkpoint['test_losses']
-    epoch_pc_losses = checkpoint['epoch_pc_losses']
-    epoch_hd_losses = checkpoint['epoch_hd_losses']
-
-
+    # checkpoint = torch.load(CHECKPOINT_PATH + f'model_{start_epoch:04d}.pt')
+    # start_epoch = checkpoint['epoch'] + 1
+    # gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
+    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    # epoch_losses = checkpoint['epoch_losses']
+    # test_losses = checkpoint['test_losses']
+    # epoch_pc_losses = checkpoint['epoch_pc_losses']
+    # epoch_hd_losses = checkpoint['epoch_hd_losses']
 
     # Creating Scorer Objects
     starts = [0.2] * 10
@@ -264,23 +333,19 @@ if __name__ == '__main__':
             step += 1
 
         # Logging
-        losses_t = torch.Tensor(losses)
-        epoch_loss_mean = losses_t.mean()
-        epoch_loss_std = losses_t.std()
-        epoch_losses.append(epoch_loss_mean)
-        print(f'Epoch {epoch:4d}:  Loss Mean:{epoch_loss_mean:4.4f}  Loss Std:{epoch_loss_std:4.4f}')
+        log_losses(losses, pc_losses, hd_losses)
 
-        pc_losses_np = np.array(pc_losses)
-        hd_losses_np = np.array(hd_losses)
-        pc_losses_mean = pc_losses_np.mean()
-        pc_losses_std = pc_losses_np.std()
-        epoch_pc_losses.append(pc_losses_mean)
-        hd_losses_mean = hd_losses_np.mean()
-        hd_losses_std = hd_losses_np.std()
-        epoch_hd_losses.append(hd_losses_mean)
-        print(f'Mean PC loss:{pc_losses_mean:4.4f}  PC loss std:{pc_losses_std:4.4f}')
-        print(f'Mean HD loss:{hd_losses_mean:4.4f}  HD loss std:{hd_losses_std:4.4f}')
-
+        # Dropout Scheduling
+        # only works when we have a single dropout rate (no lists!)
+        if DP_SCHEDULING and epoch % DP_UPDATE_FREQ == 0:
+            if epoch == 0:
+                print(f'Initial DP: {DP_INIT:4.4f}')
+                scheduled_dropouts.append(DP_INIT)
+            else:
+                new_dp = dp_scheduler.get_dp(epoch_losses[-1], epoch_losses[-DP_UPDATE_FREQ - 1])
+                gridtorchmodel.dropouts[0].p = new_dp
+                scheduled_dropouts.append(new_dp)
+                print(f'New DP: {new_dp:4.4f}')
 
         # Evaluation
         if epoch % CHECKPOINT_PER_EPOCH == 0:
@@ -342,44 +407,20 @@ if __name__ == '__main__':
                         break
                     eval_steps += 1
 
-            losses_t = torch.tensor(losses)
-            test_loss_mean = losses_t.mean()
-            test_loss_std = losses_t.std()
-            test_losses.append(test_loss_mean)
-            print(f'Mean test loss: {test_loss_mean:4.4f}  Test loss std: {test_loss_std:4.4f}')
+            # Logging and plotting evaluation results
+            log_evaluations(losses, activations, target_posxy, pred_posxy)
 
-            activations = torch.cat(activations).cpu().numpy()
-            target_posxy = torch.cat(target_posxy).cpu().numpy()
-            pred_posxy = torch.cat(pred_posxy).cpu().numpy()
-
-            results_filename = scores_filename + f'{epoch:04d}.pdf'
-            trace_filename = base_trace_filename + f'{epoch:04d}.pdf'
-            utils.get_scores_and_plot(latest_epoch_scorer, target_posxy, activations, scores_directory, results_filename)
-            utils.get_traces_and_plot(target_posxy, pred_posxy, place_cell_ensembles[0].means.cpu().numpy(), trace_directory, trace_filename)
-
-
-        # Checkpointing
-        if epoch % CHECKPOINT_PER_EPOCH == 0:
+            # Checkpointing
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': gridtorchmodel.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'loss': epoch_loss_mean,
+                'loss': epoch_losses[-1],
                 'epoch_losses': epoch_losses,
                 'test_losses': test_losses,
                 'epoch_pc_losses': epoch_pc_losses,
                 'epoch_hd_losses': epoch_hd_losses
             }, CHECKPOINT_PATH+f'model_{epoch:04d}.pt')
 
-            # Saving Loss files
-            epoch_losses_np = np.array(epoch_losses)
-            np.save('epochlosses.npy', epoch_losses_np)
-
-            test_losses_np = np.array(test_losses)
-            np.save('testlosses.npy', test_losses_np)
-
-            epoch_hd_losses_np = np.array(epoch_hd_losses)
-            np.save('epochhdlosses.npy', epoch_hd_losses_np)
-
-            epoch_pc_losses_np = np.array(epoch_pc_losses)
-            np.save('epochpclosses.npy', epoch_pc_losses_np)
+            # Saving Log files
+            save_log_files()
