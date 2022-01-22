@@ -131,9 +131,9 @@ def softmax_crossentropy_with_logits(labels, logits):
 
 
 def log_losses(losses, pc_losses, hd_losses):
-    losses_t = torch.Tensor(losses)
-    epoch_loss_mean = losses_t.mean()
-    epoch_loss_std = losses_t.std()
+    losses_np = np.array(losses)
+    epoch_loss_mean = losses_np.mean()
+    epoch_loss_std = losses_np.std()
     epoch_losses.append(epoch_loss_mean)
     print(f'Epoch {epoch:4d}:  Loss Mean:{epoch_loss_mean:4.4f}  Loss Std:{epoch_loss_std:4.4f}')
 
@@ -164,7 +164,7 @@ def save_log_files():
 
     if DP_SCHEDULING:
         dropouts_np = np.array(scheduled_dropouts)
-        np.save('dropouts.npy', scheduled_dropouts)
+        np.save('dropouts.npy', dropouts_np)
 
 
 def log_evaluations(losses, activations, target_posxy, pred_posxy):
@@ -250,6 +250,8 @@ if __name__ == '__main__':
     # test_losses = checkpoint['test_losses']
     # epoch_pc_losses = checkpoint['epoch_pc_losses']
     # epoch_hd_losses = checkpoint['epoch_hd_losses']
+    # scheduled_dropouts = np.load('dropouts.npy').tolist()
+    # dp_scheduler = DPScheduler(DP_UPPERB, DP_LOWERB, N_EPOCHS, DP_UPDATE_FREQ, scheduled_dropouts[-1])
 
     # Creating Scorer Objects
     starts = [0.2] * 10
