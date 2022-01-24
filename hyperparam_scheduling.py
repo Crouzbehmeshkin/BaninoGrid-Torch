@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class DPScheduler():
     def __init__(self, upperbound, lowerbound, total_epochs, update_frequency, init_dp):
         self.upperbound = upperbound
@@ -16,3 +19,17 @@ class DPScheduler():
         delta_dp = loss_diff * scaling_factor
         self.current_dp -= delta_dp
         return self.current_dp
+
+
+class LRScheduler():
+    def __init__(self, lr_max, lr_min, n_updates):
+        self.lr_max = lr_max
+        self.lr_min = lr_min
+        n_updates = n_updates
+
+    def get_all_lr(self):
+        lr_all = np.logspace(np.log(self.lr_max), np.log(self.lr_min), 100, base=np.exp(1)).tolist()
+        # Safe measure in case of training for more epochs
+        for i in range(3):
+            lr_all.append(lr_all[-1])
+        return lr_all

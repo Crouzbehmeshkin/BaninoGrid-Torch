@@ -9,7 +9,7 @@ import torch
 import tensorflow as tf
 from dataloader import SupervisedDataset
 from torch.utils.data import DataLoader
-from DropoutScheduling import DPScheduler
+from hyperparam_scheduling import DPScheduler, LRScheduler
 import torch.nn.functional as F
 import os
 
@@ -19,6 +19,9 @@ tf.config.set_visible_devices([], 'GPU')
 # for turning off annoying warnings
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+##############################################################################
+########################### ADDED CONFIGURATION ##############################
+##############################################################################
 # Neuromodulation config
 LSTM_TYPE = 'Simple_NM'  # default, Simple_NM
 
@@ -29,7 +32,15 @@ DP_UPPERB = 0.8
 DP_INIT = 0.5
 DP_UPDATE_FREQ = 10  # in epochs
 
-## initial config
+# Learning rate scheduling
+LR_SCHEDULING = True
+LR_MAX = 1e-5
+LR_MIN = LR_MAX*1e-1
+LR_UPDATE_FREQ = 10
+
+############################################################################
+############################### BASE CONFIG ################################
+############################################################################
 N_EPOCHS = 1000
 RESULT_PER_EPOCH = 10 * 1
 CHECKPOINT_PER_EPOCH = 5
@@ -48,8 +59,8 @@ N_PC = [256]
 N_HDC = [12]
 BOTTLENECK_DROPOUT = [0.5]
 WEIGHT_DECAY = 1e-5
-LR = 1e-5 # Original 1e-5
-MOMENTUM = 0.9 # original 0.9
+LR = 1e-5  # Original 1e-5
+MOMENTUM = 0.9  # original 0.9
 TIME = 50
 PAUSE_TIME = None
 SAVE_LOC = 'experiments/'
@@ -112,6 +123,7 @@ test_losses = []
 epoch_hd_losses = []
 epoch_pc_losses = []
 scheduled_dropouts = []
+
 
 # Equivalent of tf.nn.softmax_crossentropy_with_logits
 def Loss_Function(logits, labels):
@@ -240,6 +252,11 @@ if __name__ == '__main__':
     if DP_SCHEDULING:
         dp_scheduler = DPScheduler(DP_UPPERB, DP_LOWERB, N_EPOCHS, DP_UPDATE_FREQ, DP_INIT)
 
+    # For learning rate scheduling
+    if LR_SCHEDULING:
+        lr_scheduler = LRScheduler(LR_MAX, LR_MIN, N_EPOCHS//LR_UPDATE_FREQ + 1)
+        lr_all = lr_scheduler.get_all_lr()
+
     start_epoch = 0
     # if trying to resume training from a checkpoint, comment otherwise
     # checkpoint = torch.load(CHECKPOINT_PATH + f'model_{start_epoch:04d}.pt')
@@ -251,7 +268,8 @@ if __name__ == '__main__':
     # epoch_pc_losses = checkpoint['epoch_pc_losses']
     # epoch_hd_losses = checkpoint['epoch_hd_losses']
     # scheduled_dropouts = np.load('dropouts.npy').tolist()
-    # dp_scheduler = DPScheduler(DP_UPPERB, DP_LOWERB, N_EPOCHS, DP_UPDATE_FREQ, scheduled_dropouts[-1])
+    # print(f'loaded current dp {scheduled_dropouts[-1]}')
+    # dp_scheduler.current_dp = scheduled_dropouts[-1]
 
     # Creating Scorer Objects
     starts = [0.2] * 10
@@ -274,6 +292,11 @@ if __name__ == '__main__':
 
         activations = []
         posxy = []
+
+        if LR_SCHEDULING:
+            if epoch % LR_UPDATE_FREQ == 0:
+                for param_gp in optimizer.param_groups:
+                    param_gp['lr'] = lr_all[epoch//LR_UPDATE_FREQ]
 
         # Training for the specified number of steps
         for X, y in train_dataloader:

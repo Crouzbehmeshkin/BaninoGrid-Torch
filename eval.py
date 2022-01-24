@@ -250,9 +250,9 @@ if __name__ == '__main__':
                 step += 1
 
         # Logging
-        losses_t = torch.Tensor(losses)
-        epoch_loss_mean = losses_t.mean()
-        epoch_loss_std = losses_t.std()
+        losses_np = np.array(losses)
+        epoch_loss_mean = losses_np.mean()
+        epoch_loss_std = losses_np.std()
         epoch_losses.append(epoch_loss_mean)
         print(f'Epoch {epoch:4d}:  Loss Mean:{epoch_loss_mean:4.4f}  Loss Std:{epoch_loss_std:4.4f}')
 
@@ -326,9 +326,9 @@ if __name__ == '__main__':
                     break
                 eval_steps += 1
 
-            losses_t = torch.tensor(losses)
-            test_loss_mean = losses_t.mean()
-            test_loss_std = losses_t.std()
+            losses_np = np.array(losses)
+            test_loss_mean = losses_np.mean()
+            test_loss_std = losses_np.std()
             test_losses.append(test_loss_mean)
             print(f'Mean test loss: {test_loss_mean:4.4f}  Test loss std: {test_loss_std:4.4f}')
 
