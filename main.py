@@ -25,15 +25,17 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 # Neuromodulation config
 LSTM_TYPE = 'Simple_NM'  # default, Simple_NM
 
+RAND_INIT_NOISE = False
+
 # Dropout Scheduling config
-DP_SCHEDULING = True
+DP_SCHEDULING = False
 DP_LOWERB = 0.2
 DP_UPPERB = 0.8
 DP_INIT = 0.5
 DP_UPDATE_FREQ = 10  # in epochs
 
 # Learning rate scheduling
-LR_SCHEDULING = True
+LR_SCHEDULING = False
 LR_MAX = 1e-5
 LR_MIN = LR_MAX*1e-1
 LR_UPDATE_FREQ = 10
@@ -53,14 +55,14 @@ NH_BOTTLENECK = 256
 ENV_SIZE = 2.2
 BATCH_SIZE = 10  # original 10
 TRAINING_STEPS_PER_EPOCH = 1000    # original 1000
-GRAD_CLIPPING = 1e-5
+GRAD_CLIPPING = 1e-5  # original 1e-5
 SEED = 9101
 N_PC = [256]
 N_HDC = [12]
 BOTTLENECK_DROPOUT = [0.5]
 WEIGHT_DECAY = 1e-5
 LR = 1e-5  # Original 1e-5
-MOMENTUM = 0.9  # original 0.9
+MOMENTUM = 0.9  # Original 0.9
 TIME = 50
 PAUSE_TIME = None
 SAVE_LOC = 'experiments/'
@@ -246,6 +248,7 @@ if __name__ == '__main__':
                                     momentum=MOMENTUM,
                                     alpha=0.9,
                                     eps=1e-10)
+    # optimizer = torch.optim.SGD(params, lr=LR, momentum=MOMENTUM)
 
     # For Dropout Scheduling
     dp_scheduler = None
@@ -298,13 +301,23 @@ if __name__ == '__main__':
                 for param_gp in optimizer.param_groups:
                     param_gp['lr'] = lr_all[epoch//LR_UPDATE_FREQ]
 
+        if RAND_INIT_NOISE:
+            angle = np.random.uniform(0, 2) * np.pi
+            radius = 0.2
+            init_noise_mean = torch.Tensor([radius*np.cos(angle), radius*np.sin(angle)])
+            init_noise_cov = torch.eye(2)*radius/2
+            dist = torch.distributions.multivariate_normal.MultivariateNormal(init_noise_mean, init_noise_cov)
+
         # Training for the specified number of steps
         for X, y in train_dataloader:
             optimizer.zero_grad()
 
             init_pos, init_hd, ego_vel = X
             target_pos, target_hd = y
-            
+
+            if RAND_INIT_NOISE:
+                init_pos = init_pos + dist.sample(init_pos.shape[:-1])
+                init_pos = torch.clamp(init_pos, -1.1, 1.1)
             init_pos = init_pos.to(device)
             init_hd = init_hd.to(device)
             ego_vel = torch.swapaxes(ego_vel.to(device), 0, 1)
@@ -368,7 +381,7 @@ if __name__ == '__main__':
                 scheduled_dropouts.append(DP_INIT)
             else:
                 new_dp = dp_scheduler.get_dp(epoch_losses[-1], epoch_losses[-DP_UPDATE_FREQ - 1])
-                gridtorchmodel.dropouts[0].p = new_dp
+                gridtorchmodel.dropouts[0].p = 1 - new_dp
                 scheduled_dropouts.append(new_dp)
                 print(f'New DP: {new_dp:4.4f}')
 
