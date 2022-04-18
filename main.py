@@ -28,15 +28,15 @@ LSTM_TYPE = 'Simple_NM'  # default, Simple_NM
 RAND_INIT_NOISE = False
 
 # Dropout Scheduling config
-DP_SCHEDULING = False
+DP_SCHEDULING = True
 DP_LOWERB = 0.2
 DP_UPPERB = 0.8
 DP_INIT = 0.5
 DP_UPDATE_FREQ = 10  # in epochs
 
 # Learning rate scheduling
-LR_SCHEDULING = False
-LR_MAX = 1e-5
+LR_SCHEDULING = True
+LR_MAX = 1e-4
 LR_MIN = LR_MAX*1e-1
 LR_UPDATE_FREQ = 10
 
@@ -47,7 +47,7 @@ N_EPOCHS = 1000
 RESULT_PER_EPOCH = 10 * 1
 CHECKPOINT_PER_EPOCH = 5
 EVAL_STEPS = 400 # Original 400
-CHECKPOINT_PATH = 'checkpoints/'
+CHECKPOINT_PATH = 'checkpoints/run32/'
 
 NH_LSTM = 128
 NH_BOTTLENECK = 256
@@ -61,7 +61,7 @@ N_PC = [256]
 N_HDC = [12]
 BOTTLENECK_DROPOUT = [0.5]
 WEIGHT_DECAY = 1e-5
-LR = 1e-5  # Original 1e-5
+LR = 1e-4  # Original 1e-5
 MOMENTUM = 0.9  # Original 0.9
 TIME = 50
 PAUSE_TIME = None
@@ -201,6 +201,10 @@ def log_evaluations(losses, activations, target_posxy, pred_posxy):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
+    # Creating the checkpoint path
+    if not os.path.exists(CHECKPOINT_PATH):
+        os.makedirs(CHECKPOINT_PATH, exist_ok=True)
+
     # loading the data
     train_data_dic = utils.load_datadic_from_tfrecords(path, _DATASETS, 'square_room', feature_map, TRAIN_DATA_RANGE)
     test_data_dic = utils.load_datadic_from_tfrecords(path, _DATASETS, 'square_room', feature_map, TEST_DATA_RANGE)
@@ -286,7 +290,7 @@ if __name__ == '__main__':
     print('Started Training ...')
     # Training Loop
 
-    for epoch in range(start_epoch, N_EPOCHS):
+    for epoch in range(start_epoch, N_EPOCHS + 1):
         gridtorchmodel.train()
         step = 1
         losses = []

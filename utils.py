@@ -174,13 +174,14 @@ def get_scores_and_plot(scorer,
     #Plot
     cols = 16
     rows = int(np.ceil(n_units / cols))
-    fig = plt.figure(figsize=(24, rows*4))
+    fig = plt.figure(figsize=(28, int(rows*4.5)))
     for i in range(n_units):
         rf = plt.subplot(rows*2, cols, i+1)
         acr = plt.subplot(rows*2, cols, n_units + i + 1)
         if i < n_units:
             index = ordering[i]
-            title = "%d (%.2f)" % (index, score_60[index])
+            title = f'{index:d} s60:{score_60[index]:.2f}\ns90:{score_90[index]:.2f}'
+            # title = "%d (%.2f)" % (index, score_60[index])
             #Plotting the activation maps
             scorer.plot_ratemap(s[index], ax=rf, title=title, cmap=cm)
             #Plotting the autocorrelation of the activation maps
@@ -200,6 +201,7 @@ def get_scores_and_plot(scorer,
     return (np.asarray(score_60), np.asarray(score_90),
             np.asarray(map(np.mean, max_60_mask)),
             np.asarray(map(np.mean, max_90_mask)))
+
 
 def get_traces_and_plot(targets, preds, pc_centers, directory, filename, n_samples=20, save=True):
     timesteps = targets.shape[1]
@@ -249,5 +251,25 @@ def get_spatial_error(targets, preds, pc_centers):
     # could be done faster using matrix multiplication
     preds = np.array([pc_centers[preds_mask[i], :] for i in range(preds_mask.shape[0])])
     targets = targets.reshape(-1, 2)
+    
+    err = np.linalg.norm(targets-preds, axis=1)
 
-    return np.linalg.norm(targets-preds, axis=1).mean()
+    return err.mean(), err.std()
+
+
+def get_scores(scorer,
+               data_abs_xy,
+               activations):
+    #Concatenate all trajectories
+    xy = data_abs_xy.reshape(-1, data_abs_xy.shape[-1])
+    act = activations.reshape(-1, activations.shape[-1])
+    n_units = act.shape[1]
+
+    #Get the rate-map for each unit
+    s = [scorer.calculate_ratemap(xy[:, 0], xy[:, 1], act[:, i])
+        for i in range(n_units)]
+
+    #Get the scores
+    score_60, score_90, max_60_mask, max_90_mask, sac = zip(
+        *[scorer.get_scores(rate_map) for rate_map in s])
+    return score_60, score_90
