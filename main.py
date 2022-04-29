@@ -47,7 +47,7 @@ N_EPOCHS = 1000
 RESULT_PER_EPOCH = 10 * 1
 CHECKPOINT_PER_EPOCH = 5
 EVAL_STEPS = 400 # Original 400
-CHECKPOINT_PATH = 'checkpoints/run32/'
+CHECKPOINT_PATH = 'checkpoints/run33/'
 
 NH_LSTM = 128
 NH_BOTTLENECK = 256
@@ -197,6 +197,9 @@ def log_evaluations(losses, activations, target_posxy, pred_posxy):
     utils.get_scores_and_plot(latest_epoch_scorer, target_posxy_np, activations_np, scores_directory, results_filename)
     utils.get_traces_and_plot(target_posxy_np, pred_posxy_np, place_cell_ensembles[0].means.cpu().numpy(), trace_directory,
                               trace_filename)
+    spatial_err_mean, spatial_err_std = utils.get_spatial_error(target_posxy_np, pred_posxy_np, place_cell_ensembles[0].means.cpu().numpy())
+    print(f'Mean spatial error: {spatial_err_mean:4.4f}')
+    print(f'Spatial error std: {spatial_err_std:4.4f}')
 
 
 # Press the green button in the gutter to run the script.
@@ -264,19 +267,26 @@ if __name__ == '__main__':
         lr_scheduler = LRScheduler(LR_MAX, LR_MIN, N_EPOCHS//LR_UPDATE_FREQ + 1)
         lr_all = lr_scheduler.get_all_lr()
 
-    start_epoch = 0
+    start_epoch = 995
     # if trying to resume training from a checkpoint, comment otherwise
-    # checkpoint = torch.load(CHECKPOINT_PATH + f'model_{start_epoch:04d}.pt')
-    # start_epoch = checkpoint['epoch'] + 1
-    # gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
-    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    # epoch_losses = checkpoint['epoch_losses']
-    # test_losses = checkpoint['test_losses']
-    # epoch_pc_losses = checkpoint['epoch_pc_losses']
-    # epoch_hd_losses = checkpoint['epoch_hd_losses']
-    # scheduled_dropouts = np.load('dropouts.npy').tolist()
-    # print(f'loaded current dp {scheduled_dropouts[-1]}')
-    # dp_scheduler.current_dp = scheduled_dropouts[-1]
+    checkpoint = torch.load(CHECKPOINT_PATH + f'model_{start_epoch:04d}.pt')
+    for key in checkpoint:
+        print(f'key {key}')
+    start_epoch = checkpoint['epoch'] + 1
+    gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    # epoch_losses = []
+    # test_losses = []
+    # epoch_pc_losses = []
+    # epoch_hd_losses = []
+    epoch_losses = checkpoint['epoch_losses']
+    test_losses = checkpoint['test_losses']
+    epoch_pc_losses = checkpoint['epoch_pc_losses']
+    epoch_hd_losses = checkpoint['epoch_hd_losses']
+
+    scheduled_dropouts = np.load('dropouts.npy').tolist()
+    print(f'loaded current dp {scheduled_dropouts[-1]}')
+    dp_scheduler.current_dp = scheduled_dropouts[-1]
 
     # Creating Scorer Objects
     starts = [0.2] * 10
