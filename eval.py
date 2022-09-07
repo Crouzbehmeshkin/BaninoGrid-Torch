@@ -13,6 +13,10 @@ import torch.nn.functional as F
 import os
 import pandas as pd
 
+# Setting the run number and GPU core to use
+RUN = 14
+CORE = 0
+
 # for running stuff locally (Tensorflow didn't support my cuda version)
 tf.config.set_visible_devices([], 'GPU')
 
@@ -20,14 +24,14 @@ tf.config.set_visible_devices([], 'GPU')
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # Neuromodulation config
-LSTM_TYPE = 'Simple_NM'  # default, Simple_NM
+LSTM_TYPE = 'default'  # default, Simple_NM
 
 ## initial config
 N_EPOCHS = 1000
 RESULT_PER_EPOCH = 10 * 1
 CHECKPOINT_PER_EPOCH = 5
 EVAL_STEPS = 400 # Original 400
-CHECKPOINT_PATH = 'checkpoints/'
+CHECKPOINT_PATH = f'checkpoints/run{RUN}/'
 
 NH_LSTM = 128
 NH_BOTTLENECK = 256
@@ -50,10 +54,11 @@ SAVE_LOC = 'experiments/'
 TRAIN_DATA_RANGE = [0, 90]
 TEST_DATA_RANGE = [90, 100]
 
+# Setting the name and path for ratemaps (scores) and traces
 scores_filename = 'rates_'
-scores_directory = 'results/scores/'
+scores_directory = f'results/eval/run{RUN}/scores/'
 base_trace_filename = 'traces_'
-trace_directory = 'results/traces/'
+trace_directory = f'results/eval/run{RUN}/traces/'
 
 # path = 'data/tmp/'
 path = 'data/'
@@ -122,7 +127,7 @@ if __name__ == '__main__':
     test_data_dic = utils.load_datadic_from_tfrecords(path, _DATASETS, 'square_room', feature_map, TEST_DATA_RANGE)
 
     use_cuda = torch.cuda.is_available()
-    device = torch.device('cuda:0' if use_cuda else 'cpu')
+    device = torch.device(f'cuda:{CORE}' if use_cuda else 'cpu')
     print('Using device:', device)
 
     # Dataset and Dataloader
@@ -171,14 +176,14 @@ if __name__ == '__main__':
     epoch_hd_losses = []
     epoch_pc_losses = []
 
-    start_epoch = 995
+    start_epoch = 1000
     # if trying to resume training from a checkpoint, comment otherwise
     checkpoint = torch.load(CHECKPOINT_PATH + f'model_{start_epoch:04d}.pt')
     # start_epoch = checkpoint['epoch'] + 1
     gridtorchmodel.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    for epoch in range(start_epoch, 996):
+    for epoch in range(start_epoch, 1001):
         # No train mode
         gridtorchmodel.eval()
         step = 1
@@ -336,5 +341,6 @@ if __name__ == '__main__':
             target_posxy = torch.cat(target_posxy).cpu().numpy()
             pred_posxy = torch.cat(pred_posxy).cpu().numpy()
 
-            mean_spatial_error = utils.get_spatial_error(target_posxy, pred_posxy, place_cell_ensembles[0].means.cpu().numpy())
-            print(f'Mean Spatial Error: {mean_spatial_error:4.4f}')
+            spatial_err_mean, spatial_err_std  = utils.get_spatial_error(target_posxy, pred_posxy, place_cell_ensembles[0].means.cpu().numpy())
+            print(f'Mean spatial err: {spatial_err_mean:4.4f}')
+            print(f'Spatial err std: {spatial_err_std:4.4f}')

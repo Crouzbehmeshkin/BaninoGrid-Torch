@@ -1,6 +1,8 @@
 import numpy as np
 import math
+import matplotlib
 import matplotlib.pyplot as plt
+# matplotlib.use('Agg') 
 import scipy.signal
 
 
@@ -34,7 +36,7 @@ class GridScorer(object):
     self._nbins = nbins
     self._min_max = min_max
     self._coords_range = coords_range
-    self._corr_angles = [30, 45, 60, 90, 120, 135, 150]
+    self._corr_angles = [30, 45, 60, 90, 120, 135, 150, 180]
     # Create all masks
     self._masks = [(self._get_ring_mask(mask_min, mask_max), (mask_min,
                                                               mask_max))
@@ -69,6 +71,9 @@ class GridScorer(object):
 
   def grid_score_90(self, corr):
     return corr[90] - (corr[45] + corr[135]) / 2
+  
+  def stripe_score(self, corr):
+    return corr[180] - corr[90]
 
   def calculate_sac(self, seq1):
     """Calculating spatial autocorrelogram."""
@@ -136,7 +141,7 @@ class GridScorer(object):
       masked_rotated_sac = (rotated_sac - masked_sac_mean) * mask
       cross_prod = np.sum(masked_sac_centered * masked_rotated_sac) / ring_area
       corrs[angle] = cross_prod / variance
-    return self.grid_score_60(corrs), self.grid_score_90(corrs), variance
+    return self.stripe_score(corrs), self.grid_score_60(corrs), self.grid_score_90(corrs), variance
 
   def get_scores(self, rate_map):
     """Get summary of scrores for grid cells."""
@@ -147,11 +152,12 @@ class GridScorer(object):
         self.get_grid_scores_for_mask(sac, rotated_sacs, mask)
         for mask, mask_params in self._masks  # pylint: disable=unused-variable
     ]
-    scores_60, scores_90, variances = map(np.asarray, zip(*scores))  # pylint: disable=unused-variable
+    stripe_scores, scores_60, scores_90, variances = map(np.asarray, zip(*scores))  # pylint: disable=unused-variable
     max_60_ind = np.argmax(scores_60)
     max_90_ind = np.argmax(scores_90)
+    max_stripe_ind = np.argmax(stripe_scores)
 
-    return (scores_60[max_60_ind], scores_90[max_90_ind],
+    return (stripe_scores[0], scores_60[max_60_ind], scores_90[max_90_ind],
             self._masks[max_60_ind][1], self._masks[max_90_ind][1], sac)
 
   def plot_ratemap(self, ratemap, ax=None, title=None, *args, **kwargs):  # pylint: disable=keyword-arg-before-vararg

@@ -13,6 +13,10 @@ from hyperparam_scheduling import DPScheduler, LRScheduler
 import torch.nn.functional as F
 import os
 
+# Setting the run number and GPU core to use
+RUN = 14
+CORE = 1
+
 # for running stuff locally (Tensorflow didn't support my cuda version)
 tf.config.set_visible_devices([], 'GPU')
 
@@ -23,19 +27,20 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 ########################### ADDED CONFIGURATION ##############################
 ##############################################################################
 # Neuromodulation config
-LSTM_TYPE = 'Simple_NM'  # default, Simple_NM
+LSTM_TYPE = 'default'  # default, Simple_NM
 
+# Whether to add random noise to initial position
 RAND_INIT_NOISE = False
 
-# Dropout Scheduling config
-DP_SCHEDULING = True
+# Dropout Scheduling config, lower and upper bound, initial dropout, and update frequency
+DP_SCHEDULING = False
 DP_LOWERB = 0.2
 DP_UPPERB = 0.8
 DP_INIT = 0.5
 DP_UPDATE_FREQ = 10  # in epochs
 
-# Learning rate scheduling
-LR_SCHEDULING = True
+# Learning rate scheduling, start and end learning rates, and update frequency
+LR_SCHEDULING = False
 LR_MAX = 1e-4
 LR_MIN = LR_MAX*1e-1
 LR_UPDATE_FREQ = 10
@@ -43,11 +48,13 @@ LR_UPDATE_FREQ = 10
 ############################################################################
 ############################### BASE CONFIG ################################
 ############################################################################
+# Same config as in the original Banino et al. TF1 implementation
 N_EPOCHS = 1000
 RESULT_PER_EPOCH = 10 * 1
 CHECKPOINT_PER_EPOCH = 5
 EVAL_STEPS = 400 # Original 400
-CHECKPOINT_PATH = 'checkpoints/run33/'
+# Where to save model checkpoints
+CHECKPOINT_PATH = f'checkpoints/run{RUN}/'
 
 NH_LSTM = 128
 NH_BOTTLENECK = 256
@@ -55,29 +62,30 @@ NH_BOTTLENECK = 256
 ENV_SIZE = 2.2
 BATCH_SIZE = 10  # original 10
 TRAINING_STEPS_PER_EPOCH = 1000    # original 1000
-GRAD_CLIPPING = 1e-5  # original 1e-5
+GRAD_CLIPPING = 1e-6  # original 1e-5
 SEED = 9101
 N_PC = [256]
 N_HDC = [12]
 BOTTLENECK_DROPOUT = [0.5]
 WEIGHT_DECAY = 1e-5
-LR = 1e-4  # Original 1e-5
+LR = 1e-5  # Original 1e-5
 MOMENTUM = 0.9  # Original 0.9
 TIME = 50
 PAUSE_TIME = None
+# base directory to save result files
 SAVE_LOC = 'experiments/'
 
-# TRAIN_DATA_RANGE = [0, 3]
-# TEST_DATA_RANGE = [3, 6]
+# Setting train and test datasets
 TRAIN_DATA_RANGE = [0, 90]
 TEST_DATA_RANGE = [90, 100]
 
+# Setting the name and path for ratemaps (scores) and traces
 scores_filename = 'rates_'
-scores_directory = 'results/scores/'
+scores_directory = f'results/run{RUN}/scores/'
 base_trace_filename = 'traces_'
-trace_directory = 'results/traces/'
+trace_directory = f'results/run{RUN}/traces/'
 
-# path = 'data/tmp/'
+# Input data path
 path = 'data/'
 DatasetInfo = collections.namedtuple(
     'DatasetInfo', ['basepath', 'size', 'sequence_length', 'coord_range'])
@@ -164,24 +172,27 @@ def log_losses(losses, pc_losses, hd_losses):
 
 
 def save_log_files():
+    stat_base_dir = f'stats/run{RUN}'
+    if not os.path.exists(stat_base_dir):
+        os.makedirs(stat_base_dir)
     epoch_losses_np = np.array(epoch_losses)
-    np.save('epochlosses.npy', epoch_losses_np)
+    np.save(f'{stat_base_dir}/epochlosses.npy', epoch_losses_np)
 
     test_losses_np = np.array(test_losses)
-    np.save('testlosses.npy', test_losses_np)
+    np.save(f'{stat_base_dir}/testlosses.npy', test_losses_np)
 
     epoch_hd_losses_np = np.array(epoch_hd_losses)
-    np.save('epochhdlosses.npy', epoch_hd_losses_np)
+    np.save(f'{stat_base_dir}/epochhdlosses.npy', epoch_hd_losses_np)
 
     epoch_pc_losses_np = np.array(epoch_pc_losses)
-    np.save('epochpclosses.npy', epoch_pc_losses_np)
+    np.save(f'{stat_base_dir}/epochpclosses.npy', epoch_pc_losses_np)
 
     if DP_SCHEDULING:
         dropouts_np = np.array(scheduled_dropouts)
-        np.save('dropouts.npy', dropouts_np)
+        np.save(f'{stat_base_dir}/dropouts.npy', dropouts_np)
 
 
-def log_evaluations(losses, activations, target_posxy, pred_posxy):
+def log_evaluations(losses, activations, target_posxy, pred_posxy, print_err=False):
     losses_t = torch.tensor(losses)
     test_loss_mean = losses_t.mean()
     test_loss_std = losses_t.std()
@@ -197,9 +208,10 @@ def log_evaluations(losses, activations, target_posxy, pred_posxy):
     utils.get_scores_and_plot(latest_epoch_scorer, target_posxy_np, activations_np, scores_directory, results_filename)
     utils.get_traces_and_plot(target_posxy_np, pred_posxy_np, place_cell_ensembles[0].means.cpu().numpy(), trace_directory,
                               trace_filename)
-    spatial_err_mean, spatial_err_std = utils.get_spatial_error(target_posxy_np, pred_posxy_np, place_cell_ensembles[0].means.cpu().numpy())
-    print(f'Mean spatial error: {spatial_err_mean:4.4f}')
-    print(f'Spatial error std: {spatial_err_std:4.4f}')
+    if print_err:
+      spatial_err_mean, spatial_err_std = utils.get_spatial_error(target_posxy_np, pred_posxy_np, place_cell_ensembles[0].means.cpu().numpy())
+      print(f'Mean spatial err: {spatial_err_mean:4.4f}')
+      print(f'Spatial err std: {spatial_err_std:4.4f}')
 
 
 # Press the green button in the gutter to run the script.
@@ -213,7 +225,7 @@ if __name__ == '__main__':
     test_data_dic = utils.load_datadic_from_tfrecords(path, _DATASETS, 'square_room', feature_map, TEST_DATA_RANGE)
 
     use_cuda = torch.cuda.is_available()
-    device = torch.device('cuda:0' if use_cuda else 'cpu')
+    device = torch.device(f'cuda:{CORE}' if use_cuda else 'cpu')
     print('Using device:', device)
 
     # Dataset and Dataloader
@@ -251,10 +263,10 @@ if __name__ == '__main__':
 
     # Optimizer
     optimizer = torch.optim.RMSprop(params,
-                                    lr=LR,
-                                    momentum=MOMENTUM,
-                                    alpha=0.9,
-                                    eps=1e-10)
+                                   lr=LR,
+                                   momentum=MOMENTUM,
+                                   alpha=0.9,
+                                   eps=1e-10)
     # optimizer = torch.optim.SGD(params, lr=LR, momentum=MOMENTUM)
 
     # For Dropout Scheduling
@@ -284,9 +296,9 @@ if __name__ == '__main__':
     epoch_pc_losses = checkpoint['epoch_pc_losses']
     epoch_hd_losses = checkpoint['epoch_hd_losses']
 
-    scheduled_dropouts = np.load('dropouts.npy').tolist()
-    print(f'loaded current dp {scheduled_dropouts[-1]}')
-    dp_scheduler.current_dp = scheduled_dropouts[-1]
+    # scheduled_dropouts = np.load('dropouts.npy').tolist()
+    # print(f'loaded current dp {scheduled_dropouts[-1]}')
+    # dp_scheduler.current_dp = scheduled_dropouts[-1]
 
     # Creating Scorer Objects
     starts = [0.2] * 10
@@ -460,8 +472,11 @@ if __name__ == '__main__':
                     eval_steps += 1
 
             # Logging and plotting evaluation results
-            log_evaluations(losses, activations, target_posxy, pred_posxy)
-
+            if epoch % 100 == 0:
+              log_evaluations(losses, activations, target_posxy, pred_posxy, True)
+            else:
+              log_evaluations(losses, activations, target_posxy, pred_posxy)
+            
             # Checkpointing
             torch.save({
                 'epoch': epoch,

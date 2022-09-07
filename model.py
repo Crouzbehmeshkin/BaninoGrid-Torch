@@ -168,7 +168,7 @@ class GridTorch(nn.Module):
         self._init_conds_size = 268
 
         # LSTM Layer
-        if LSTM_type == 'Simple_NM':
+        if LSTM_type=='Simple_NM':
             self.rnn = NM_LSTM(3, self._nh_lstm)
         else:
             self.rnn = CustomLSTM(3, self._nh_lstm)

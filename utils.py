@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
+# matplotlib.use('Agg') 
 import tensorflow as tf
 
 import os
@@ -159,7 +161,7 @@ def get_scores_and_plot(scorer,
         for i in range(n_units)]
 
     #Get the scores
-    score_60, score_90, max_60_mask, max_90_mask, sac = zip(
+    stripe_score, score_60, score_90, max_60_mask, max_90_mask, sac = zip(
         *[scorer.get_scores(rate_map) for rate_map in s])
 
     #Seperations
@@ -197,7 +199,7 @@ def get_scores_and_plot(scorer,
             os.makedirs(directory)
         with PdfPages(os.path.join(directory, filename), 'w') as f:
             plt.savefig(f, format='pdf')
-        plt.close(fig)
+    plt.close(fig)
     return (np.asarray(score_60), np.asarray(score_90),
             np.asarray(map(np.mean, max_60_mask)),
             np.asarray(map(np.mean, max_90_mask)))
@@ -243,7 +245,16 @@ def get_traces_and_plot(targets, preds, pc_centers, directory, filename, n_sampl
             os.makedirs(directory)
         with PdfPages(os.path.join(directory, filename), 'w') as f:
             plt.savefig(f, format='pdf')
-        plt.close(fig)
+    plt.close(fig)
+
+
+def get_all_traces(targets, preds, pc_centers):
+    targets = targets.reshape(-1, targets.shape[-1])
+    preds_mask = np.argmax(preds.reshape(-1, preds.shape[-1]), axis=1)
+    preds = np.array([pc_centers[preds_mask[i], :] for i in range(preds_mask.shape[0])])
+    targets = targets.reshape(-1, 2)
+
+    return targets, preds
 
 
 def get_spatial_error(targets, preds, pc_centers):
@@ -270,6 +281,8 @@ def get_scores(scorer,
         for i in range(n_units)]
 
     #Get the scores
-    score_60, score_90, max_60_mask, max_90_mask, sac = zip(
+    stripe_score, score_60, score_90, max_60_mask, max_90_mask, sac = zip(
         *[scorer.get_scores(rate_map) for rate_map in s])
-    return score_60, score_90
+    return stripe_score, score_60, score_90, s, sac
+    # s holds ratemaps, sac holds autocorrelations
+
